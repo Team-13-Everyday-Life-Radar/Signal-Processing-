@@ -1,5 +1,5 @@
-frames = 2; % chirps per frame
-samples = 4; % samples per chirp
+frames = 16; % chirps per frame
+samples = 64; % samples per chirp
 receivers = 1; % text write and read doesn't work for receivers = 2
 current_line = 0;
 
