@@ -16,14 +16,13 @@ current_line = 0;
 % end
 % fclose(fileID);
 
-
 % % Read ydata matrix from text file (can only upload receiver 1)
-ydata = zeros(samples,receivers,frames)
+ydata_read = zeros(samples,receivers,frames)
 input = load('ydata.txt')
 for h = 1:(frames)
     for g = 1:samples
-        ydata(g,1,h) = input(g+current_line,1) + 1i*input(g+current_line,2);
+        ydata_read(g,1,h) = input(g+current_line,1) + 1i*input(g+current_line,2);
     end
     current_line = current_line+g;
 end
-disp(ydata) % print ydata to command line (only contains information for receiver 1
+disp(ydata_read) % print ydata to command line (only contains information for receiver 1
