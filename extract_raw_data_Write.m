@@ -86,13 +86,13 @@ while true
     % % Write data from Rx1
     if j <= frames
         for i = 1:chirps
-            fprintf(fileID1,'%f %f\n',[real(ydata(:,1,i,j)),imag(ydata(:,1,i,j))].'); 
+            fprintf(fileID1,'%f %f\n',[real(ydata(:,1,i)),imag(ydata(:,1,i))].'); 
         end
     end
     % % Write data from Rx2
     if j <= frames
         for i = 1:chirps
-            fprintf(fileID2,'%f %f\n',[real(ydata(:,2,i,j)),imag(ydata(:,2,i,j))].'); 
+            fprintf(fileID2,'%f %f\n',[real(ydata(:,2,i)),imag(ydata(:,2,i))].'); 
         end
     else
         break
