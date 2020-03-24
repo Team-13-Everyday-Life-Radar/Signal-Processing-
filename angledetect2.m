@@ -34,8 +34,6 @@ oRS %#ok<*NOPTS>
    
    chirp = 16;
    i = 1;
-   n = 1;
-   angle_sum = 0;
    
 while true
     % 3. Trigger radar chirp and get the raw data
