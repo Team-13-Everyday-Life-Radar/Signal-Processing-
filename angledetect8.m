@@ -43,7 +43,7 @@ fC = (f2+f1)/2;
    
 lambda = c / fC;
 
-minrange = 0.95; maxrange= 10;
+minrange = 0.95; maxrange= 3;
 minbeatfreq = ((chirpslope)*2*minrange)/c ;
 maxbeatfreq = ((chirpslope)*2*maxrange)/c ;
 
@@ -132,11 +132,6 @@ while true
         ang_rx_2 = angle(x2_final(ind_max_1));
         
         d_phi = ang_rx_1 - ang_rx_2;
-        
-        if (d_phi <= 0)
-            d_phi = d_phi + 2*pi;
-        end
-         d_phi = d_phi - pi;
                 
         target_angle = (asin((d_phi * lambda) / (antenna_spacing * (2*pi)))); % AOA in radians
     
