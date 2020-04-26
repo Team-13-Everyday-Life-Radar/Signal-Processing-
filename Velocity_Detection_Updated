@@ -1,0 +1,234 @@
+clc
+disp('******************************************************************');
+addpath('C:\IFX_P2G-HW-SW_V1.0.2\Firmware_Software\Communication Library\ComLib_Matlab_Interface\RadarSystemImplementation'); % add Matlab API
+clear all; 
+close all
+resetRS; % close and delete ports
+
+% 1. Create radar system object
+szPort = findRSPort;  %scan all available ports
+oRS = RadarSystem(szPort); % setup object and connect to board
+
+disp('Connected RadarSystem:');
+oRS %#ok<*NOPTS>
+
+% 2. Enable automatic trigger with frame time 1s
+minrange = 0.9;
+maxrange= 20;
+% % Variables needed to write ydata to text file
+receiver1 = 'Rx1';
+receiver2 = 'Rx2';
+test_type = 'RadialFoilSound_';
+test_no = 'T1_';
+chirps_str = '16_';
+samples_str = '256_FWD';
+codename = 'E3';
+fileID1 = fopen(append(receiver1,test_type,test_no,chirps_str,samples_str,codename),'w'); % Receiver 1 ydata
+fileID2 = fopen(append(receiver2,test_type,test_no,chirps_str,samples_str,codename),'w'); % Receiver 2 ydata
+% Change variables accordingly
+chirps = 16 % chirps per frame
+samples = 256 % samples per chirp
+receivers = 1; % text write and read doesn't work for receivers = 2
+frames = 30; % how many frames do you want recorded?
+current_line = 0;
+j = 1;
+PhDiff_array = zeros(1,chirps/2,frames);
+vr_array = zeros(1,chirps/2,frames);
+PhDiff_avg_array = zeros(1,frames);
+vr_avg_array = zeros(1,frames);
+
+store_PhDiff = zeros(1,frames);
+store_vr = zeros(1,frames);
+
+
+ 
+ oRS.oEPRadarBase.stop_automatic_frame_trigger; % stop it to change values
+% 
+% %  properties of radar
+   oRS.oEPRadarFMCW.lower_frequency_kHz = 24025000; % lower FMCW frequency 
+   oRS.oEPRadarFMCW.upper_frequency_kHz = 24225000; % upper FMCW frequency 
+   oRS.oEPRadarBase.num_chirps_per_frame = chirps;  %[1,128]
+   oRS.oEPRadarBase.num_samples_per_chirp = samples; % [32, 64, 128, 256] 
+% Tc = cast(oRS.oEPRadarBase.chirp_duration_ns * (10^-9),'double'); % chirp time
+oRS.oEPTargetDetection.min_range_cm = minrange*100; % set max distance
+oRS.oEPTargetDetection.max_range_cm = maxrange*100;
+oRS.oEPTargetDetection.max_speed_kmh = 20; % set max speed
+oRS.oEPTargetDetection.min_speed_kmh = 0;
+%    oRS.oEPRadarADCXMC.samplerate_Hz = 640000; % 640000 affects the chirp time
+   oRS.oEPRadarFMCW.direction = 'Up Only';
+
+   chirp_time = oRS.oEPRadarBase.chirp_duration_ns
+frame_interval = oRS.oEPRadarBase.min_frame_interval_us
+min_rf_freq = oRS.oEPRadarBase.min_rf_frequency_kHz
+max_rf_freq = oRS.oEPRadarBase.max_rf_frequency_kHz
+   
+antenna_spacing = 6.22e-3; % in meters
+c = 3e8;
+snum = double(oRS.oEPRadarBase.num_samples_per_chirp); % sample per chirp
+cnum = double(oRS.oEPRadarBase.num_chirps_per_frame); % chirp per frame
+fs = double(oRS.oEPRadarADCXMC.samplerate_Hz);  % samppling freq
+bw = double(oRS.oEPRadarFMCW.bandwidth_per_second); % chirpslope in microsec
+ts =  double(oRS.oEPRadarBase.chirp_duration_ns); % chirp duration(ns) 
+t =  0 : 1/fs : (1e-9*ts)-(1/fs); 
+f1= double(oRS.oEPRadarFMCW.lower_frequency_kHz)*1e3; % min freq 
+f2= double(oRS.oEPRadarFMCW.upper_frequency_kHz)*1e3; % max freq
+
+   oRS.oEPRadarBase.set_automatic_frame_trigger(1000000/2); %1 sec
+   
+f= f1: (f2-f1)/snum: f2-((f2-f1)/snum); 
+chirpslope = (f2-f1)/(t(end));
+nfft = 128;
+fC = (f2+f1)/2;
+   
+lambda = c / fC;
+
+minbeatfreq = ((chirpslope)*2*minrange)/c ;
+maxbeatfreq = ((chirpslope)*2*maxrange)/c ;
+
+threshhold = 20; % fft mag
+
+ 
+i = 0;
+
+
+% disp(chirp_time)
+% disp(frame_interval)
+% disp(min_rf_freq)
+% disp(max_rf_freq)
+freq = (fs/nfft)*(-nfft/2:(nfft/2)-1);
+fr = freq((nfft/2 +1):(end));
+
+x1 = zeros(samples,1,chirps/2);
+x2 = zeros(samples,1,chirps/2);
+neg = 0;
+pos = 0;
+
+while true
+    % 3. Trigger radar chirp and get the raw data
+    [mxRawData, sInfo] = oRS.oEPRadarBase.get_frame_data;
+    ydata = mxRawData; % get raw data
+
+    disp(j)
+    a = 1;
+    f = 1;
+% % % % % % % % % % % % % % % Velocity Detection Algorithm
+for h = 1:2:chirps-1
+%     x1(:,1,f,j) = sqrt(((imag(ydata_readRx1(:,1,h,j))).^2) + ((real(ydata_readRx1(:,1,h,j))).^2));
+%     x2(:,1,f,j) = sqrt((imag(ydata_readRx1(:,1,h+1,j)).^2) + ((real(ydata_readRx1(:,1,h+1,j))).^2));
+    x1(:,1,f) = ydata(:,1,h);
+    x2(:,1,f) = ydata(:,1,h+1);
+%     
+    x1(:,1,f) = x1(:,1,f) - mean(x1(:,1,f));
+    x2(:,1,f) = x2(:,1,f) - mean(x2(:,1,f));
+    
+    X1 = fftshift(fft(x1(:,1,f)));
+    X2 = fftshift(fft(x2(:,1,f)));
+    
+    X1_half = X1(((nfft/2)+1):end);
+    X2_half = X2(((nfft/2)+1):end);
+    
+    stepfreq = fr(2) - fr(1); % affected by fs and nfft
+    minindx = round((minbeatfreq - fr(1))/stepfreq);
+    maxindx = round((maxbeatfreq - fr(1))/stepfreq);
+    
+    X1_final = X1_half((minindx+1):(maxindx+1));
+    X2_final = X2_half((minindx+1):(maxindx+1));
+    
+    [pk1, indx1] = max((X1_final));
+    [pk2, indx2] = max((X2_final));
+    PhDiff_array(1,a,j) = angle(X2_final(indx2)) - angle(X1_final(indx1)); % in radians
+    vr_array(1,a,j) = (PhDiff_array(1,a,j)*(lambda))/(4*pi*500*(10^-6));
+    f = f+1;
+    a = a+1;
+end 
+ 
+    PhDiff_avg_array(1,j) = mean(PhDiff_array(1,:,j));
+    vr_avg_array(1,j) = mean(vr_array(1,:,j))*3.6;
+    disp(PhDiff_avg_array(1,j))
+    disp(vr_avg_array(1,j))
+
+
+if vr_avg_array(1,j) < 0
+    neg = neg+1;
+elseif vr_avg_array(1,j) > 0
+    pos = pos+1;
+end
+
+% % % % % % % % % % % % % % %  END Velocity Detection
+
+% % % % % % % % % % % % % % % Write ydata matrix to text file (can only upload data from 1 receiver at a time)
+    % % Write data from Rx1
+    if j <= frames
+        for i = 1:chirps
+            fprintf(fileID1,'%f %f\n',[real(ydata(:,1,i)),imag(ydata(:,1,i))].'); 
+        end
+    else
+%         break
+    end
+    % % Write data from Rx2
+    if j <= frames
+        for i = 1:chirps
+            fprintf(fileID2,'%f %f\n',[real(ydata(:,2,i)),imag(ydata(:,2,i))].'); 
+        end
+    else
+        break
+    end
+    j = j+1;
+% % % % % % % % % % % % % % %     
+end
+if pos > neg
+    direction = "forward"
+    disp(direction)
+    Fo = 200;
+                              Fs_audio = 44100;
+                        x = zeros(Fs_audio*4, 1);
+                        delay = round(Fs_audio/Fo);
+                        b  = firls(42, [0 1/delay 2/delay 1], [0 0 1 1]);
+                        a  = [1 zeros(1, delay) -0.5 -0.5];
+        
+                        zi = rand(max(length(b),length(a))-1,1);
+                        note = filter(b, a, x, zi);
+                        note = note-mean(note);
+                        note = note/max(abs(note));
+                        hplayer = audioplayer(note, Fs_audio); play(hplayer)
+%                         pause(audio_delay) 
+                    
+elseif pos < neg
+    direction = "backward"
+    disp(direction)
+    Fo = 500;
+                              Fs_audio = 44100;
+                        x = zeros(Fs_audio*4, 1);
+                        delay = round(Fs_audio/Fo);
+                        b  = firls(42, [0 1/delay 2/delay 1], [0 0 1 1]);
+                        a  = [1 zeros(1, delay) -0.5 -0.5];
+        
+                        zi = rand(max(length(b),length(a))-1,1);
+                        note = filter(b, a, x, zi);
+                        note = note-mean(note);
+                        note = note/max(abs(note));
+                        hplayer = audioplayer(note, Fs_audio); play(hplayer)
+%                         pause(audio_delay) 
+                    
+end
+speed = 0;
+if direction == "forward"
+    speed = max(vr_avg_array)
+    
+elseif direction == "backward"
+    speed = min(vr_avg_array)
+end
+% speed = max(vr_avg_array)
+max_val = max(abs(vr_avg_array))
+min_val = min(vr_avg_array)
+avg_val = mean(vr_avg_array)
+% x_ph = 0:(500e-6)*chirps:((500e-6)*(frames*chirps))-((500e-6*frames*chirps)*(1/frames))
+% x_ph = 0:(1/frames)*4:4-((1/frames)*4)
+x_ph = 0:1:frames;
+
+plot(x_ph,vr_avg_array)
+title('Radial Velocity')
+xlabel("frames")
+ylabel("velocity (km/h)")
+
+
